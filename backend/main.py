@@ -54,7 +54,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 IMAGE_BASE_PATH = os.getenv("IMAGE_BASE_PATH", "/inday_fileinfo/img")
 SITE_BASE_URL = os.getenv("SITE_BASE_URL", "https://www.pimfyvirus.com")
-CURRENT_SERVER_URL = "http://223.130.130.93:8000" # 8000 포트 반영
+CURRENT_SERVER_URL = "http://223.130.146.245:8000"
 
 database = databases.Database(DATABASE_URL) if DATABASE_URL else None
 metadata = sqlalchemy.MetaData()
@@ -126,15 +126,11 @@ os.makedirs("generated_images", exist_ok=True)
 #app.mount("/images", StaticFiles(directory="/app/generated_images"), name="images")
 app.mount("/images", StaticFiles(directory="generated_images"), name="images")
 
-if torch.cuda.is_available():
-    device = "cuda"
-    gpu_id = 0
-    print(f"🚀 GPU Mode: {torch.cuda.get_device_name(0)}")
-else:
-    device = "cpu"
-    gpu_id = None
+device = "cpu"
+gpu_id = None
+print("🛡️ Backend is running on CPU Mode to save VRAM for SDXL.")
 
-SDXL_SERVICE_URL = "http://localhost:8001/generate/background"
+SDXL_SERVICE_URL = "http://172.17.0.2:8001/generate/background"
 
 @app.on_event("startup")
 def load_models_and_db():
@@ -222,20 +218,18 @@ def remove_emojis(text):
     return re.sub(r'[^\w\s,.\-?!@#%&()가-힣/]', '', text).strip() if text else ""
 
 async def call_sdxl_service(base64_dog_image: str, dog_info: dict) -> Image.Image:
-    # 🎨 복잡한 로직 다 필요 없이, 바로 시연용 단색 배경을 생성해서 반환합니다.
-    return Image.new('RGB', (1080, 1350), (255, 240, 245))
-#async def call_sdxl_service(base64_dog_image: str, dog_info: dict) -> Image.Image:
-   # color_prompts = ["Soft Pastel Pink", "Creamy Yellow", "Light Baby Blue", "Mint Green", "Lavender Purple", "Warm Peach", "Off-White and Beige"]
-   # selected = random.choice(color_prompts)
-   # print(f"🎨 Color: {selected}")
-   # prompt = f"{selected} background, minimalist aesthetic, clean interior, cozy atmosphere, high quality, soft focus, instagram vibe."
-    
-   # try:
-       # async with httpx.AsyncClient(timeout=100.0) as client:
-           # res = await client.post(SDXL_SERVICE_URL, json={"base64_dog_image": base64_dog_image, "prompt": prompt})
-           # res.raise_for_status()
-           # return Image.open(io.BytesIO(base64.b64decode(res.json().get("base64_background_image")))).convert("RGB")
-   # except: return Image.new('RGB', (1080, 1350), (255, 240, 245))
+    print(f"🎨 SDXL 서버(8001)에 이미지 생성을 요청합니다...")
+    try:
+        async with httpx.AsyncClient(timeout=100.0) as client:
+            # 주소를 컨테이너 이름인 sdxl-service로 하거나 localhost로 설정
+            res = await client.post("http://172.17.0.2:8001/generate/background", 
+                                    json={"base64_dog_image": base64_dog_image, "prompt": "luxury studio background"})
+            res.raise_for_status()
+            return Image.open(io.BytesIO(base64.b64decode(res.json().get("base64_background_image")))).convert("RGB")
+    except Exception as e:
+        print(f"🚨 SDXL 호출 에러: {e}")
+        # 에러 나면 임시로 단색 배경이라도 띄워줌
+        return Image.new('RGB', (1080, 1350), (255, 240, 245))
 
 def generate_dog_text(dog: Dog) -> Dict:
     raw_name = dog.subject
@@ -474,18 +468,19 @@ async def search_dogs(name: str):
         })
     return res
 
-#if __name__ == "__main__":
-   # import uvicorn
-   # import threading
+if __name__ == "__main__":
+    import uvicorn
+    import threading
 
-    # 1. MCP 서버는 8002번으로! (8001은 SDXL 전용)
+    # 1. MCP 서버 실행 함수
     def run_mcp():
-        import os  # <-- 여기서부터는 반드시 8칸(또는 2개의 탭) 들여쓰기가 되어야 합니다.
+        import os
         os.environ["MCP_PORT"] = "8002" 
         mcp.run(transport="sse")
 
-    # threading 부분은 def와 같은 세로 라인에 맞춰야 합니다.
+    # MCP 서버를 별도 스레드에서 실행
     threading.Thread(target=run_mcp, daemon=True).start()
 
-    # 2. 메인 FastAPI는 변함없이 8000번
-   # uvicorn.run(app, host="0.0.0.0", port=8000)
+    # 2. 메인 FastAPI 서버 실행 (8000번 포트)
+    print("🚀 메인 서버(8000)를 시작합니다...")
+    uvicorn.run(app, host="0.0.0.0", port=8000)

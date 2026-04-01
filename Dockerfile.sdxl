@@ -1,0 +1,29 @@
+# 1. 베이스 이미지 고정
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 2. 시스템 패키지 설치
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 3. 핵심: 의존성 라이브러리 버전을 수동으로 강제 고정 (requirements 파일 무시하고 직접 설치)
+# 이 버전들이 torch 2.1.0과 가장 완벽하게 호환되는 황금 조합입니다.
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    diffusers==0.21.4 \
+    transformers==4.34.0 \
+    accelerate==0.23.0 \
+    huggingface-hub==0.17.3 \
+    fastapi uvicorn pydantic==1.10.11 python-multipart Pillow numpy
+
+# 4. 소스 파일 복사 (현재 위치가 /data/pimfy라고 가정)
+COPY . .
+
+# 5. 실행 경로 수정 (컨테이너 내부 구조에 맞게)
+CMD ["python3", "backend/sdxl_server.py"]
