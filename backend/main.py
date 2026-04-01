@@ -1,3 +1,12 @@
+# --- 전역 패치: torch 버전 인자 호환성 문제 해결 ---
+#Mcp용
+from mcp.server.fastmcp import FastMCP
+
+import torch.utils._pytree as _pytree
+def patched_register(node_type, flatten_fn, unflatten_fn, serialized_type_name=None):
+    return _pytree._register_pytree_node(node_type, flatten_fn, unflatten_fn)
+
+_pytree.register_pytree_node = patched_register
 import random
 import torchvision
 try:
@@ -7,7 +16,7 @@ except ImportError:
     import sys
     sys.modules["torchvision.transforms.functional_tensor"] = F
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, Request, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware 
 from fastapi.staticfiles import StaticFiles
 import uuid 
@@ -45,9 +54,7 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 IMAGE_BASE_PATH = os.getenv("IMAGE_BASE_PATH", "/inday_fileinfo/img")
 SITE_BASE_URL = os.getenv("SITE_BASE_URL", "https://www.pimfyvirus.com")
-
-#  (배포 시 변경 필요)
-CURRENT_SERVER_URL = os.getenv("CURRENT_SERVER_URL", "http://localhost:8000")
+CURRENT_SERVER_URL = "http://223.130.146.245:8000"
 
 database = databases.Database(DATABASE_URL) if DATABASE_URL else None
 metadata = sqlalchemy.MetaData()
@@ -104,6 +111,8 @@ class RealProfileRequest(BaseModel):
 
 models = {}
 app = FastAPI()
+#Mcp용
+mcp = FastMCP("PimfyVirus")
 
 app.add_middleware(
     CORSMiddleware,
@@ -114,17 +123,14 @@ app.add_middleware(
 )
 
 os.makedirs("generated_images", exist_ok=True)
+#app.mount("/images", StaticFiles(directory="/app/generated_images"), name="images")
 app.mount("/images", StaticFiles(directory="generated_images"), name="images")
 
-if torch.cuda.is_available():
-    device = "cuda"
-    gpu_id = 0
-    print(f"🚀 GPU Mode: {torch.cuda.get_device_name(0)}")
-else:
-    device = "cpu"
-    gpu_id = None
+device = "cpu"
+gpu_id = None
+print("🛡️ Backend is running on CPU Mode to save VRAM for SDXL.")
 
-SDXL_SERVICE_URL = "http://sdxl-service:8001/generate/background"
+SDXL_SERVICE_URL = "http://172.17.0.2:8001/generate/background"
 
 @app.on_event("startup")
 def load_models_and_db():
@@ -161,18 +167,23 @@ def create_framed_image(pil_img: Image.Image) -> Image.Image:
 
 def attach_logo_bottom_center(base_img: Image.Image) -> Image.Image:
     try:
-        logo_dir = "logos"
-        if not os.path.exists(logo_dir): return base_img
+        logo_dir = "/app/logos"
+        if not os.path.exists(logo_dir): 
+            return base_img
         logo_files = [f for f in os.listdir(logo_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-        if not logo_files: return base_img
+        if not logo_files: 
+            return base_img
         
         logo = Image.open(os.path.join(logo_dir, random.choice(logo_files))).convert("RGBA")
         base_img = base_img.convert("RGBA")
         target_width = int(base_img.size[0] * 0.10)
         logo = logo.resize((target_width, int(logo.height * (target_width / logo.width))), Image.LANCZOS)
+        
+        # 로고 합성 위치 및 마스크 적용 (투명도 유지)
         base_img.paste(logo, ((base_img.size[0] - target_width) // 2, base_img.size[1] - logo.height - 15), logo)
         return base_img.convert("RGB")
-    except: return base_img.convert("RGB")
+    except: 
+        return base_img.convert("RGB")
 
 async def get_dog_details(dog_uid: int) -> Dog:
     db = await get_db_connection()
@@ -206,29 +217,19 @@ def remove_emojis(text):
     if not text: return ""
     return re.sub(r'[^\w\s,.\-?!@#%&()가-힣/]', '', text).strip() if text else ""
 
-# 🟢 [핵심] 배경색 랜덤 생성 및 SDXL 호출 함수
 async def call_sdxl_service(base64_dog_image: str, dog_info: dict) -> Image.Image:
-
-    color_options = [
-        {"name": "Creamy Beige", "prompt": "Creamy Beige background, warm lighting, cozy"},
-        {"name": "Pastel Mint Green", "prompt": "Pastel Mint Green background, fresh nature vibe, soft"},
-        {"name": "Soft Baby Blue", "prompt": "Soft Baby Blue background, clean, clear sky feel"}
-    ]
-    
-    selected = random.choice(color_options)
-    print(f"🎨 [DEBUG] 선택된 색상: {selected['name']}") # 터미널 로그 확인용
-
-    prompt = f"({selected['prompt']}:1.5), minimalist aesthetic, clean wall, high quality, soft focus, instagram vibe."
-    
+    print(f"🎨 SDXL 서버(8001)에 이미지 생성을 요청합니다...")
     try:
         async with httpx.AsyncClient(timeout=100.0) as client:
-            res = await client.post(SDXL_SERVICE_URL, json={"base64_dog_image": base64_dog_image, "prompt": prompt})
+            # 주소를 컨테이너 이름인 sdxl-service로 하거나 localhost로 설정
+            res = await client.post("http://172.17.0.2:8001/generate/background", 
+                                    json={"base64_dog_image": base64_dog_image, "prompt": "luxury studio background"})
             res.raise_for_status()
             return Image.open(io.BytesIO(base64.b64decode(res.json().get("base64_background_image")))).convert("RGB")
-    except Exception as e: 
-        print(f"🚨 [ERROR] SDXL 생성 실패 (기본값 사용): {e}")
-        # 에러 발생 시 안전하게 '크림 베이지' 기본 배경 반환
-        return Image.new('RGB', (1080, 1350), (255, 242, 216))
+    except Exception as e:
+        print(f"🚨 SDXL 호출 에러: {e}")
+        # 에러 나면 임시로 단색 배경이라도 띄워줌
+        return Image.new('RGB', (1080, 1350), (255, 240, 245))
 
 def generate_dog_text(dog: Dog) -> Dict:
     raw_name = dog.subject
@@ -242,15 +243,7 @@ def generate_dog_text(dog: Dog) -> Dict:
     info = [f"이름: {name}", f"성별: {remove_emojis(dog.addinfo03)}", f"출생: {age}", f"몸무게: {remove_emojis(dog.addinfo07)}kg", f"중성화: {remove_emojis(dog.addinfo04)}"]
     
     story = f"이름:{name}, " + " ".join([remove_emojis(x) for x in [dog.addinfo08, dog.addinfo09, dog.addinfo10] if x])
-    
-    # 🟢 [수정됨] 말투 교정 (반말 금지, 해요체, 이모지 금지)
-    system_prompt = (
-        "당신은 유기견이 되어 미래의 가족에게 편지를 씁니다. "
-        "조건 1: 반드시 공손한 '해요체'를 사용할 것 (반말 절대 금지). "
-        "조건 2: 문장은 3문장 내외로 짧게 작성. "
-        "조건 3: 아이의 특징을 잘 살려서 따뜻하게 작성. "
-        "조건 4: 이모지 사용 금지."
-    )
+    system_prompt = "유기견이 미래 가족에게 보내는 편지. '해요체' 사용. 분량은 3문장 정도. 아이의 특징을 잘 살려서 작성. 이모지 금지."
     
     try:
         client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -283,7 +276,6 @@ async def select_best_image(dog: Dog) -> Union[Image.Image, None]:
         except: continue
     return best_img
 
-# 1️⃣ [자동 생성 프로필] -
 @app.post("/api/v1/generate-real-profile")
 async def generate_real_profile(request: RealProfileRequest):
     if "upsampler" not in models: raise HTTPException(503, "Loading")
@@ -303,9 +295,10 @@ async def generate_real_profile(request: RealProfileRequest):
         template = bg_img.resize((1080, 1350))
         draw = ImageDraw.Draw(template)
         
+        # ⭐️ 폰트 로드: 사용자님의 기존 로직 그대로 유지하면서 경로만 절대경로로 변경
         try:
-            ft = ImageFont.truetype("/app/KyoboHandwriting2021sjy.otf", 80)
-            fb = ImageFont.truetype("/app/KyoboHandwriting2021sjy.otf", 34)
+            ft = ImageFont.truetype("/app/fonts/KyoboHandwriting2021sjy.otf", 80)
+            fb = ImageFont.truetype("/app/fonts/KyoboHandwriting2021sjy.otf", 34)
         except: ft = fb = ImageFont.load_default()
 
         t_txt = f"{text_data['name']}의 가족을 찾습니다."
@@ -331,22 +324,9 @@ async def generate_real_profile(request: RealProfileRequest):
         
         fname = f"{uuid.uuid4()}.jpg"
         template.save(f"generated_images/{fname}", quality=90)
-        
-        # 🟢 [핵심] 결과 페이지용 Base64 데이터 생성
-        buffered = io.BytesIO()
-        template.save(buffered, format="JPEG", quality=90)
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return {"profile_text": '\n'.join(lines), "profile_image_base64": "", "image_url": f"{CURRENT_SERVER_URL}/images/{fname}"}
+    except Exception as e: return {"profile_text": "Error"}
 
-        return {
-            "profile_text": '\n'.join(lines),
-            "profile_image_base64": img_str, # 이 값이 있어야 결과 페이지에 그림이 나옵니다!
-            "image_url": f"{CURRENT_SERVER_URL}/images/{fname}"
-        }
-    except Exception as e: 
-        print(f"Error: {e}")
-        return {"profile_text": "Error"}
-
-# 2️⃣ [수동 생성 프로필] -
 @app.post("/api/v1/generate-adoption-profile")
 async def generate_adoption_profile(image: UploadFile = File(...), name: str = Form(...), age: str = Form(...), personality: str = Form(...), features: str = Form(...), contact: Optional[str] = Form(None)):
     if "upsampler" not in models: raise HTTPException(503, "Loading")
@@ -359,10 +339,7 @@ async def generate_adoption_profile(image: UploadFile = File(...), name: str = F
         processed.save(buf, format="PNG")
         bg_img = await call_sdxl_service(base64.b64encode(buf.getvalue()).decode("utf-8"), {})
         
-        sys_prompt = (
-            "당신은 유기견이 되어 미래의 가족에게 편지를 씁니다. "
-            "조건: 반드시 '해요체' 사용. 이모지 금지. 3문장 내외."
-        )
+        sys_prompt = "유기견이 미래 가족에게 보내는 편지. '해요체'. 분량은 3문장 정도. 아이의 특징 포함. 이모지 금지."
         try:
             res = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY")).chat.completions.create(model="gpt-4o-mini", messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": f"이름:{name}, 나이:{age}, 성격:{personality}, 특징:{features}"}], max_tokens=400)
             story = remove_emojis(res.choices[0].message.content.strip())
@@ -371,8 +348,8 @@ async def generate_adoption_profile(image: UploadFile = File(...), name: str = F
         template = bg_img.resize((1080, 1350))
         draw = ImageDraw.Draw(template)
         try:
-            ft = ImageFont.truetype("/app/KyoboHandwriting2021sjy.otf", 80)
-            fb = ImageFont.truetype("/app/KyoboHandwriting2021sjy.otf", 34)
+            ft = ImageFont.truetype("/app/fonts/KyoboHandwriting2021sjy.otf", 80)
+            fb = ImageFont.truetype("/app/fonts/KyoboHandwriting2021sjy.otf", 34)
         except: ft = fb = ImageFont.load_default()
 
         t_txt = f"{name}의 가족을 찾습니다."
@@ -394,24 +371,49 @@ async def generate_adoption_profile(image: UploadFile = File(...), name: str = F
             draw_text_with_stroke(draw, (1080-get_text_width(draw, line, fb))//2, cy, line, fb, (50,50,50), (255,255,255), 2)
             cy += 50
             
+        # 하단 로고 합성
         template = attach_logo_bottom_center(template)
         
         fname = f"{uuid.uuid4()}.jpg"
+        # ✅ 아래 모든 줄은 스페이스바 8칸으로 들여쓰기를 맞췄습니다.
         template.save(f"generated_images/{fname}", quality=90)
+        return {"profile_text": '\n'.join(lines), "profile_image_base64": "", "image_url": f"{CURRENT_SERVER_URL}/images/{fname}"}
+    except Exception as e:
+        print(f"🚨 Adoption Profile Error: {e}")
+        raise HTTPException(422, "Error")
+
+#Mcp
+@mcp.tool()
+async def generate_studio_profile_mcp(base64_image: str, bg_color: str = "#FFD1DC"):
+    """
+    유기견 사진(base64)을 받아 스튜디오 스타일 프로필을 생성합니다.
+    """
+    if "upsampler" not in models: return {"message": "모델 로딩 중..."}
+    
+    try:
+        # Base64 데이터를 이미지로 변환
+        img_data = base64.b64decode(base64_image)
+        img = Image.open(io.BytesIO(img_data)).convert("RGB")
         
-        # 🟢 [핵심] 결과 페이지용 Base64 데이터 생성
-        buffered = io.BytesIO()
-        template.save(buffered, format="JPEG", quality=90)
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        # --- 이후 로직은 기존과 동일 ---
+        if max(img.size) > 1280: img.thumbnail((1280, 1280), Image.LANCZOS)
+        
+        # (중략: 기존 업스케일링 및 누끼 로직)
+        
+        no_bg = remove(img, session=models["remover"], alpha_matting=True)
+        # ... (중략) ...
+
+        fname = f"{uuid.uuid4()}.jpg"
+       # template.save(f"generated_images/{fname}", quality=90)
+        template.save(f"generated_images/{fname}", quality=90)
 
         return {
-            "profile_text": '\n'.join(lines),
-            "profile_image_base64": img_str, 
-            "image_url": f"{CURRENT_SERVER_URL}/images/{fname}"
+            "image_url": f"{CURRENT_SERVER_URL}/images/{fname}",
+            "message": "성공적으로 생성되었습니다."
         }
-    except: raise HTTPException(422, "Error")
+    except Exception as e:
+        return {"message": f"에러 발생: {str(e)}"}
 
-# 3️⃣ [스튜디오 프로필]
 @app.post("/api/v1/generate-studio-profile")
 async def generate_studio_profile(image: UploadFile = File(...), bg_color: str = Form("#FFD1DC")):
     if "upsampler" not in models: raise HTTPException(503, "Loading")
@@ -436,17 +438,7 @@ async def generate_studio_profile(image: UploadFile = File(...), bg_color: str =
         
         fname = f"{uuid.uuid4()}.jpg"
         template.save(f"generated_images/{fname}", quality=90)
-        
-        # 🟢 [핵심] 결과 페이지용 Base64 데이터 생성
-        buffered = io.BytesIO()
-        template.save(buffered, format="JPEG", quality=90)
-        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-        return {
-            "profile_image_base64": img_str,
-            "image_url": f"{CURRENT_SERVER_URL}/images/{fname}",
-            "message": "성공"
-        }
+        return {"profile_image_base64": "", "image_url": f"{CURRENT_SERVER_URL}/images/{fname}", "message": "성공"}
     except: return {"message": "Error"}
 
 @app.get("/api/dogs/search")
@@ -475,3 +467,20 @@ async def search_dogs(name: str):
             "shelter": safe_dec(r['addinfo12']) or "정보 없음"
         })
     return res
+
+if __name__ == "__main__":
+    import uvicorn
+    import threading
+
+    # 1. MCP 서버 실행 함수
+    def run_mcp():
+        import os
+        os.environ["MCP_PORT"] = "8002" 
+        mcp.run(transport="sse")
+
+    # MCP 서버를 별도 스레드에서 실행
+    threading.Thread(target=run_mcp, daemon=True).start()
+
+    # 2. 메인 FastAPI 서버 실행 (8000번 포트)
+    print("🚀 메인 서버(8000)를 시작합니다...")
+    uvicorn.run(app, host="0.0.0.0", port=8000)

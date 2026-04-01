@@ -1,6 +1,8 @@
 // 백엔드 서버 주소 (이전 서버)
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// 📡 백엔드 서버 주소 (배포 시 IP 확인 필수!)
+const API_BASE_URL = "http://223.130.146.245:8000";
 
 // 1️⃣ [입양/임보 프로필] 생성 함수 (contact 추가)
 export const createAdoptionProfile = async (

@@ -16,7 +16,6 @@ torch>=2.0.0
 torchvision>=0.17.0
 transformers
 uvicorn
-# ⭐️ OpenAI 버전을 올려서 httpx 충돌 해결
 openai==1.55.0
 git+https://github.com/xinntao/Real-ESRGAN.git
 aiomysql

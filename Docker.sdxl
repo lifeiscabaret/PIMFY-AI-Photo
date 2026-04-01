@@ -1,26 +1,28 @@
+# 1. 베이스 이미지 (변경 없음)
 FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 시스템 패키지 설치
+# 2. 시스템 패키지 설치
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git libgl1-mesa-glx libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 🔥 핵심: pytree 에러를 해결하는 황금 버전 조합
-# transformers 4.34.0 버전이 torch 2.1.0과 가장 잘 맞습니다.
+# 3. 🔥 의존성 지옥 박멸 구간 (버전 절대 고정)
+# 최신버전을 가져오지 못하게 아예 버전을 명시합니다.
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
     diffusers==0.21.4 \
-    transformers==4.34.0 \
+    transformers==4.34.1 \
     accelerate==0.23.0 \
     huggingface-hub==0.17.3 \
     fastapi uvicorn pydantic==1.10.11 python-multipart Pillow numpy
 
-# 소스 파일 복사
+# 4. 소스 복사 (컨테이너 내부 구조 정리)
+# 현재 /data/pimfy에서 빌드한다고 가정하면, 파일들이 /app/backend/ 안에 들어갑니다.
 COPY . .
 
-# 실행 (경로 문제 방지를 위해 절대 경로 사용)
+# 5. 실행 (절대 경로로 지정해서 경로 에러 방지)
 CMD ["python3", "backend/sdxl_server.py"]
