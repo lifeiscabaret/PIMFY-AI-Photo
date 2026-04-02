@@ -1,14 +1,9 @@
 .env
-BasicSR/
+backend/.env
+generated_images/
 __pycache__/
+*.pyc
+node_modules/
+.next/
+sdxl/
 *.pth
-generated_images/
-
-
-# 실행 파일 및 로그
-cloudflared*
-*.log
-
-# 생성된 이미지 폴더 (용량 차주 방지)
-generated_images/
-backend/generated_images/

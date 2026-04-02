@@ -122,15 +122,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-os.makedirs("generated_images", exist_ok=True)
-#app.mount("/images", StaticFiles(directory="/app/generated_images"), name="images")
 app.mount("/images", StaticFiles(directory="generated_images"), name="images")
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+GEN_DIR = os.path.join(BASE_DIR, "generated_images")
 device = "cpu"
 gpu_id = None
 print("🛡️ Backend is running on CPU Mode to save VRAM for SDXL.")
 
-SDXL_SERVICE_URL = "http://172.17.0.2:8001/generate/background"
+SDXL_SERVICE_URL = "http://sdxl-service:8001/generate/background"
 
 @app.on_event("startup")
 def load_models_and_db():
@@ -148,9 +148,12 @@ async def shutdown_db_client():
     if database and database.is_connected: await database.disconnect()
 
 async def get_db_connection():
-    if database and not database.is_connected: await database.connect()
-    return database
-
+    if database:
+        # 이미 연결되어 있다면 그대로 반환, 아니면 연결
+        if not database.is_connected:
+            await database.connect()
+        return database
+    raise HTTPException(status_code=500, detail="Database configuration missing")
 def resize_image_if_too_large(img: Image.Image, max_dim: int = 1024) -> Image.Image:
     w, h = img.size
     if max(w, h) > max_dim:
@@ -221,8 +224,8 @@ async def call_sdxl_service(base64_dog_image: str, dog_info: dict) -> Image.Imag
     print(f"🎨 SDXL 서버(8001)에 이미지 생성을 요청합니다...")
     try:
         async with httpx.AsyncClient(timeout=100.0) as client:
-            # 주소를 컨테이너 이름인 sdxl-service로 하거나 localhost로 설정
-            res = await client.post("http://172.17.0.2:8001/generate/background", 
+            # ⭐️ 미리 정의한 SDXL_SERVICE_URL 변수를 사용합니다.
+            res = await client.post(SDXL_SERVICE_URL, 
                                     json={"base64_dog_image": base64_dog_image, "prompt": "luxury studio background"})
             res.raise_for_status()
             return Image.open(io.BytesIO(base64.b64decode(res.json().get("base64_background_image")))).convert("RGB")
@@ -325,7 +328,9 @@ async def generate_real_profile(request: RealProfileRequest):
         fname = f"{uuid.uuid4()}.jpg"
         template.save(f"generated_images/{fname}", quality=90)
         return {"profile_text": '\n'.join(lines), "profile_image_base64": "", "image_url": f"{CURRENT_SERVER_URL}/images/{fname}"}
-    except Exception as e: return {"profile_text": "Error"}
+    except Exception as e: 
+    	print(f"🚨 Profile Generation Fatal Error: {e}") # 로그에 상세 에러 출력
+    	return {"profile_text": f"Error: {str(e)}"}
 
 @app.post("/api/v1/generate-adoption-profile")
 async def generate_adoption_profile(image: UploadFile = File(...), name: str = Form(...), age: str = Form(...), personality: str = Form(...), features: str = Form(...), contact: Optional[str] = Form(None)):
