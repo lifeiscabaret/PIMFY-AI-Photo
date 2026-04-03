@@ -12,6 +12,10 @@ services:
       - "8002:8002"
     env_file:
       - .env
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     volumes:
       - ./generated_images:/app/generated_images
       - ./logos:/app/logos

@@ -126,8 +126,9 @@ app.mount("/images", StaticFiles(directory="generated_images"), name="images")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GEN_DIR = os.path.join(BASE_DIR, "generated_images")
-device = "cpu"
-gpu_id = None
+device = "cuda" if torch.cuda.is_available() else "cpu"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+gpu_id = 0
 print("🛡️ Backend is running on CPU Mode to save VRAM for SDXL.")
 
 SDXL_SERVICE_URL = "http://sdxl-service:8001/generate/background"
@@ -140,8 +141,9 @@ def load_models_and_db():
         models["upsampler"] = RealESRGANer(scale=4, model_path=model_path, model=model_arch, tile=0, tile_pad=10, pre_pad=0, half=True if device == "cuda" else False, gpu_id=gpu_id)
     except Exception as e: print(f"🚨 ESRGAN Error: {e}")
 
-    try: models["remover"] = new_session(model_name="isnet-general-use")
-    except: models["remover"] = new_session()
+    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+    try: models["remover"] = new_session(model_name="isnet-general-use", providers=["CPUExecutionProvider"])
+    except: models["remover"] = new_session(providers=["CPUExecutionProvider"])
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
@@ -223,7 +225,7 @@ def remove_emojis(text):
 async def call_sdxl_service(base64_dog_image: str, dog_info: dict) -> Image.Image:
     print(f"🎨 SDXL 서버(8001)에 이미지 생성을 요청합니다...")
     try:
-        async with httpx.AsyncClient(timeout=100.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             # ⭐️ 미리 정의한 SDXL_SERVICE_URL 변수를 사용합니다.
             res = await client.post(SDXL_SERVICE_URL, 
                                     json={"base64_dog_image": base64_dog_image, "prompt": "luxury studio background"})
