@@ -1,6 +1,9 @@
 # 📸 PIMFY Photo (핌피포토)
 > **유기견의 개성과 맥락을 시각화하는 AI 프로필 생성 서비스**
 
+## 배포 URL
+http://223.130.146.245:3000
+
 <p align="center">
   <img src="images/pimfyvirus.png" width="45%" alt="PIMFY Virus Data" />
   <img src="images/pimfy_profile.jpg" width="45%" alt="PIMFY AI Profile" />
