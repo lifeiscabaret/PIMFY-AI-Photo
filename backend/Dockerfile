@@ -1,5 +1,5 @@
 # 1. [교체] NVIDIA 이미지 ->  공식 PyTorch 이미지 사용
-FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-devel
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
 
 # 2. [설치]
 RUN apt-get update && apt-get install -y --no-install-recommends     libgl1-mesa-glx     libglib2.0-0     git     && rm -rf /var/lib/apt/lists/*
