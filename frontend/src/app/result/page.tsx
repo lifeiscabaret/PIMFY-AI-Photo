@@ -72,3 +72,10 @@ function ResultContent() {
         </div>
     );
 }
+export default function ResultPage() {
+    return (
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center">로딩 중...</div>}>
+            <ResultContent />
+        </Suspense>
+    );
+}
