@@ -277,6 +277,20 @@ async def select_best_image(dog: Dog) -> Union[Image.Image, None]:
             x, y, w, h = cv2.boundingRect(cv2.findNonZero(np.array(no_bg.split()[3])))
             score = (w*h)/(320*small.size[1])*100 + (1-(((x+w/2)-160)**2+((y+h/2)-small.size[1]/2)**2)**0.5 / (320**2+small.size[1]**2)**0.5)*50
             if img.size[1] > img.size[0] * 2.2: score -= 30
+            # 화질 낮은 이미지 패널티
+            if img.size[0] < 400 or img.size[1] < 400: score -= 50
+            # 가로로 너무 긴 이미지 패널티
+            if img.size[0] > img.size[1] * 2: score -= 30
+            # 해상도 보너스
+            if img.size[0] > 800 and img.size[1] > 800: score += 30
+            # 정사각형에 가까울수록 보너스 (정면샷 가능성 높음)
+            ratio = min(img.size[0], img.size[1]) / max(img.size[0], img.size[1])
+            score += ratio * 20
+            # 피사체가 중앙에 있을수록 보너스
+            center_x = x + w/2
+            center_y = y + h/2
+            if 100 < center_x < 220 and small.size[1]*0.3 < center_y < small.size[1]*0.7:
+                score += 25
             if score > best_score: best_score, best_img = score, img
         except: continue
     return best_img
@@ -294,7 +308,9 @@ async def generate_real_profile(request: RealProfileRequest):
         
         buf = io.BytesIO()
         processed.save(buf, format="PNG")
-        bg_img = await call_sdxl_service(base64.b64encode(buf.getvalue()).decode("utf-8"), {})
+        gender = remove_emojis(dog.addinfo03) if dog.addinfo03 else ""
+        color_hint = "pink" if "여" in gender else "cool" if "남" in gender else "lavender"
+        bg_img = await call_sdxl_service(base64.b64encode(buf.getvalue()).decode("utf-8"), {"color_hint": color_hint})
         
         text_data = generate_dog_text(dog)
         template = bg_img.resize((1080, 1350))
@@ -344,7 +360,7 @@ async def generate_adoption_profile(image: UploadFile = File(...), name: str = F
         
         buf = io.BytesIO()
         processed.save(buf, format="PNG")
-        bg_img = await call_sdxl_service(base64.b64encode(buf.getvalue()).decode("utf-8"), {})
+        bg_img = await call_sdxl_service(base64.b64encode(buf.getvalue()).decode("utf-8"), {"color_hint": "lavender"})
         
         sys_prompt = "유기견이 미래 가족에게 보내는 편지. '해요체'. 분량은 3문장 정도. 아이의 특징 포함. 이모지 금지."
         try:
