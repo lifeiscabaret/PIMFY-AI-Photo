@@ -1,0 +1,62 @@
+version: "3.3"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: pimfy-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8002:8002"
+    env_file:
+      - .env
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ./generated_images:/app/generated_images
+      - ./logos:/app/logos
+      - ./fonts:/app/fonts
+      - ./RealESRGAN_x4plus.pth:/app/esrgan/RealESRGAN_x4plus.pth
+    depends_on:
+      - sdxl-service
+    networks:
+      - pimfy-net
+
+  sdxl-service:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.sdxl
+    container_name: pimfy-sdxl
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    networks:
+      - pimfy-net
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pimfy-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - pimfy-net
+
+networks:
+  pimfy-net:
+    driver: bridge
+
+volumes:
+  huggingface-cache:

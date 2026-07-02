@@ -1,20 +1,26 @@
-FROM nvcr.io/nvidia/tensorrt:23.09-py3
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
 
-# 1. 시스템 기본 의존성 설치 (libgl1-mesa-glx 추가)
-RUN rm -rf /etc/apt/sources.list.d/* && rm -rf /var/lib/apt/lists/* && rm -rf /etc/apt/trusted.gpg.d/* && apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true -o Acquire::AllowInvalidAuthentications=true && apt-get install -y --no-install-recommends --allow-unauthenticated apt-transport-https git wget libgl1-mesa-glx && apt-get clean && rm -rf /var/lib/apt/lists/*
+ENV DEBIAN_FRONTEND=noninteractive
 
-# ⭐️ 2. 작업 디렉토리 설정
-WORKDIR /workspace
+# 시스템 패키지 설치
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git libgl1-mesa-glx libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/*
 
-# 3. 파이썬 라이브러리 설치 준비
-COPY requirements.sdxl.txt .
+WORKDIR /app
 
-# ⭐️ 4. 파이썬 라이브러리 설치
-RUN pip install --no-cache-dir git+https://github.com/xinntao/BasicSR.git && pip install --no-cache-dir -r requirements.sdxl.txt
+# 🔥 핵심: pytree 에러를 해결하는 황금 버전 조합
+# transformers 4.34.0 버전이 torch 2.1.0과 가장 잘 맞습니다.
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    diffusers==0.21.4 \
+    transformers==4.34.0 \
+    accelerate==0.23.0 \
+    huggingface-hub==0.17.3 \
+    fastapi uvicorn pydantic==1.10.11 python-multipart Pillow numpy
 
-# 5. 소스 코드 복사
-COPY sdxl_server.py .
+# 소스 파일 복사
+COPY . .
 
-EXPOSE 8001
-
-CMD ["uvicorn", "sdxl_server:app", "--host", "0.0.0.0", "--port", "8001"]
+# 실행 (경로 문제 방지를 위해 절대 경로 사용)
+CMD ["python3", "backend/sdxl_server.py"]

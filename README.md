@@ -1,6 +1,9 @@
 # 📸 PIMFY Photo (핌피포토)
 > **유기견의 개성과 맥락을 시각화하는 AI 프로필 생성 서비스**
 
+> ⚠️ **배포 상태**: 현재 GPU 서버(NCP V100)를 반납하여 **라이브 데모는 운영하지 않습니다.**
+> (기존 배포 주소: `http://223.130.146.245:3000` — 현재 접속 불가) 아래 [시작하기](#-시작하기-getting-started) 가이드로 로컬 실행할 수 있습니다.
+
 <p align="center">
   <img src="images/pimfyvirus.png" width="45%" alt="PIMFY Virus Data" />
   <img src="images/pimfy_profile.jpg" width="45%" alt="PIMFY AI Profile" />
@@ -9,85 +12,142 @@
   <i>(왼쪽: 원본 유기동물 공고 데이터 / 오른쪽: AI를 통해 생성된 맞춤형 프로필)</i>
 </p>
 
-> ⚠️ **배포 상태**: 현재 GPU 서버(Naver Cloud V100)를 반납하여 **라이브 데모는 운영하지 않습니다.**
-> 아래 [시작하기](#-시작하기-getting-started) 가이드를 따라 로컬 환경에서 실행할 수 있습니다.
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
+![MySQL](https://img.shields.io/badge/mysql-%2300f.svg?style=for-the-badge&logo=mysql&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
+![NCP](https://img.shields.io/badge/NAVER%20Cloud-03C75A?style=for-the-badge&logo=naver&logoColor=white)
+
+---
 
 ## 📝 프로젝트 개요 (Overview)
-기존 유기견 공고 사진의 열악한 시각적 환경을 개선하기 위해 시작되었습니다. **PIMFY Photo**는 생성형 AI 기술을 활용해 유기견의 '가장 빛나는 순간'을 재구성하고, 데이터를 기반으로 감성적인 페르소나를 부여하여 실질적인 입양률 제고를 목표로 합니다.
 
-- **개발 기간**: 2025.10 - 2026.02
-- **핵심 가치**: 기술을 통한 사회적 가치 창출, 정량적 성능 최적화, 사용자 중심의 UX 개선
+보호소 직원은 동물 돌봄에 집중해야 하는데 입양 홍보 사진 제작까지 직접 해야 한다.
+저품질 이미지는 입양률 저하로 이어지고, AI가 보편화된 시대에도 이 영역엔 아무것도 적용되지 않았다.
 
----
+**PIMFY Photo**는 사진 한 장을 입력하면 배경 제거 → 업스케일 → 배경 합성 → AI 스토리 생성 → 프로필 카드 완성까지 단일 파이프라인으로 자동 처리한다. 보호소 구독 모델 기반 SaaS로 지속 가능한 비즈니스 구조를 목표로 설계했다.
 
-## ✨ 주요 기능 (Features)
-
-사용자는 목적에 맞게 **3가지 프로필 생성 모드**와 **멍생네컷** 기능을 이용할 수 있습니다.
-
-| 모드 | 설명 | 입력 데이터 | 관련 API |
-| :--- | :--- | :--- | :--- |
-| **핌피바이러스 프로필** | 유기동물 공고 DB를 검색해 선택한 아이의 정보를 기반으로 **자동 생성** | 공고 검색 (`dog_uid`) | `GET /api/dogs/search`<br/>`POST /api/v1/generate-real-profile` |
-| **입양·임보 프로필** | 사진 + 이름/나이/성격/특징/연락처를 입력하면 GPT가 **감성 스토리텔링** 문구 생성 | 이미지 업로드 + 텍스트 | `POST /api/v1/generate-adoption-profile` |
-| **스튜디오 프로필** | 사진과 원하는 배경색만으로 간편하게 스튜디오 화보풍 프로필 제작 | 이미지 업로드 + 배경색 | `POST /api/v1/generate-studio-profile` |
-| **멍생네컷** 🐾 | 업로드한 사진으로 네컷 사진 형태의 프로필 구성 | 이미지 업로드 + 사이즈 선택 | — |
-
-> HEIC(아이폰) 이미지는 프론트엔드(`heic2any`)와 백엔드(`pillow-heif`) 양쪽에서 자동 변환/처리됩니다.
+- **개발 기간**: 2025.10 ~ 2026.01 | 고도화 진행 중
+- **배포 환경**: NCP GPU 서버 (V100) · Docker
+- **핵심 가치**: AI 기술이 닿지 않는 영역에 직접 적용 · 정량적 성능 최적화 · 사회적 임팩트 정량화
 
 ---
 
-## 🏆 주요 성과 (Key Achievements)
-- **AI 추론 성능 91% 개선**: 360초(6분) → **30초** 이내로 단축
-- **인프라 효율화**: FP16 양자화를 통한 GPU 메모리 점유율 **50% 절감**
-- **UX 최적화**: Web Share API 도입으로 이미지 저장 Depth 축소 (4단계 → **2단계**)
+## 🏆 핵심 성과 (Key Achievements)
+
+| 지표 | Before | After | 개선율 |
+|------|--------|-------|--------|
+| AI 추론 시간 | 360초 (6분) | 30초 이내 | **91% 단축** |
+| GPU 메모리 점유 | FP32 기준 | FP16 양자화 적용 | **50% 절감** |
+| Vision API 호출 비용 | 전체 이미지 호출 | OpenCV 1차 필터링 후 호출 | **70% 감소** |
+| 모바일 저장 UX Depth | 4단계 | 2단계 | Web Share API 도입 |
 
 ---
 
-## 🔥 핵심 트러블슈팅 (Core Troubleshooting)
+## 🚀 핵심 서비스 (Core Service)
 
-### 1️⃣ SDXL 모델 추론 최적화 (Latency 91% 단축)
-- **문제**: 초기 SDXL 모델 도입 시, 이미지 한 장당 **약 6분(360초)**이 소요되어 실시간 서비스가 불가능한 병목 현상 발생.
-- **원인**: API 요청 시마다 대용량 모델을 새로 로드하는 로직과 가중치(FP32)의 과도한 GPU 메모리 점유.
-- **해결**: 
-  - **전역 로딩(Singleton Pattern)**: 모델을 서버 구동 시 1회 메모리에 상주시켜 재사용하는 구조로 변경.
-  - **FP16(Half Precision) 양자화**: 모델 가중치를 경량화하여 연산 속도 향상 및 GPU 메모리 병목 해소.
-- **결과**: 추론 시간을 **30초 이내로 단축**하여 실질적인 서비스 운영 가능 상태 확보.
+### 🧡 1. 핌피바이러스 프로필
+핌피바이러스 DB의 실시간 공고 데이터와 연동하여, 유기동물의 기본 정보를 구조화된 프로필 카드로 자동 변환한다.
+(`GET /api/dogs/search` → `POST /api/v1/generate-real-profile`)
 
-### 2️⃣ 모바일 저장 UX 개선 (Web Share API)
-- **문제**: 모바일 브라우저 보안 정책으로 인해 다운로드 시 갤러리가 아닌 '파일 앱'으로 저장되는 UX 불편함 발견.
-- **해결**: **Web Share API**를 도입하여 시스템 공유 시트를 호출, 사용자가 원클릭으로 **갤러리에 직접 저장**할 수 있도록 구현.
+### 🏠 2. 입양·임보 프로필
+유기견의 성격과 특징을 AI가 분석하여, 차가운 보호소 배경 대신 SDXL로 생성한 파스텔톤 배경에 합성한다.
+(`POST /api/v1/generate-adoption-profile`)
 
-### 3️⃣ 데이터 정합성 및 네트워크 예외 처리
-- **문제**: 특정 DB 환경에서 문자열이 `bytes` 타입으로 반환되어 서버 에러 유발 및 Mixed Content 보안 이슈로 이미지 렌더링 실패.
-- **해결**: `safe_dec` 유틸리티 함수를 통한 타입 검증 로직 도입 및 이미지 데이터를 **Base64**로 인코딩하여 전송함으로써 통신 안정성 확보.
+### 📸 3. 스튜디오 프로필
+Real-ESRGAN 기반 4배 업스케일링으로 전문 스튜디오 수준의 고품질 프로필을 제공한다.
+(`POST /api/v1/generate-studio-profile`)
+
+> 📱 **멍생네컷**: 업로드한 사진으로 네컷 사진 형태의 프로필도 구성할 수 있습니다.
+> HEIC(아이폰) 이미지는 프론트엔드(`heic2any`)·백엔드(`pillow-heif`) 양쪽에서 자동 처리됩니다.
 
 ---
 
-## 🏗 시스템 아키텍처 및 파이프라인
+## 🏗 시스템 아키텍처 (System Architecture)
 
-AI 파이프라인은 메모리 부하 분산을 위해 **메인 API 서버**와 **SDXL 배경 생성 서버**를 별도 컨테이너로 분리한 마이크로서비스 구조로 설계되었습니다.
+AI 파이프라인은 메모리 부하 분산을 위해 **메인 API 서버**와 **SDXL 배경 생성 서버**를 별도 컨테이너로 분리한 마이크로서비스 구조로 설계했다.
 
 ```
-[Next.js Frontend] ──HTTP──> [Main API (FastAPI, :8000)] ──HTTP──> [SDXL Service (:8001)]
-                                      │
-                                      ├── Rembg (배경 제거)
-                                      ├── Real-ESRGAN x4 (화질 복구)
-                                      ├── GPT-4o-mini (스토리텔링)
-                                      ├── MySQL (유기동물 공고 DB)
-                                      └── Pillow (레이어 합성 / UUID 저장)
+이미지 입력
+    │
+    ▼
+[1차 필터링] OpenCV — 선명도 · 밝기 · 얼굴 감지 (룰 기반)
+    │ Vision API 호출 70% 사전 차단
+    ▼
+[2차 필터링] GPT Vision — 품질 채점 후 저품질 이미지 탈락
+    ▼
+[Real-ESRGAN] 4배 업스케일링 (x4plus)
+    ▼
+[rembg] 배경 제거 (isnet-general-use)
+    ▼
+[SDXL] 랜덤 파스텔톤 배경 생성 (별도 GPU 서비스, :8001)
+    ▼
+[GPT-4o-mini] 공공데이터 기반 감성 스토리 생성 + 텍스트 오버레이
+    ▼
+프로필 카드 출력 (Pillow 합성 · UUID 저장) + Web Share API 공유
 ```
-
-1. **Rembg (`isnet-general-use`)**: 저화질 배경 제거(누끼)
-2. **Real-ESRGAN (`x4plus`)**: 4배 업스케일링을 통한 화질 복구
-3. **SDXL Service**: 개인화된 파스텔톤 배경 생성 (별도 GPU 서비스로 호출)
-4. **GPT-4o-mini**: 공고/입력 데이터 기반 감성 스토리텔링 문구 생성
-5. **Synthesis**: Pillow를 이용한 레이어 합성 및 UUID 기반 저장
 
 ---
 
-## 🛠 기술 스택 (Tech Stack)
-- **AI/ML**: SDXL, Real-ESRGAN, Rembg, GPT-4o-mini, CUDA 12.1 (TensorRT 기반 이미지)
-- **Backend**: FastAPI, SQLAlchemy + `databases` + `aiomysql`, Docker (2-container), Naver Cloud Platform (V100 GPU)
-- **Frontend**: Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS
+## ⚙️ 기술 스택 (Tech Stack)
+
+| 분류 | 기술 |
+|------|------|
+| AI 모델 | Real-ESRGAN · SDXL · rembg · GPT-4o-mini |
+| 전처리 | OpenCV |
+| 최적화 | FP16 양자화 · Singleton 모델 로딩 |
+| Backend | FastAPI · PyTorch · Python |
+| Frontend | Next.js 15 (App Router) · React 19 · TypeScript · TailwindCSS |
+| DB | MySQL (`databases` + `aiomysql`) |
+| 인프라 | NCP GPU 서버 (V100) · Docker · Cafe24 |
+
+---
+
+## 🔥 핵심 트러블슈팅 (Troubleshooting)
+
+### 1️⃣ SDXL 추론 지연 91% 단축 — Singleton + FP16 양자화
+
+**문제**: 이미지 1장당 추론 시간 약 360초(6분). 실시간 서비스 불가 수준의 병목.
+
+**원인**:
+- API 요청마다 대용량 모델을 새로 로드하는 구조
+- FP32 가중치의 과도한 GPU 메모리 점유로 추론 속도 저하
+
+**해결**:
+- **Singleton Pattern 적용**: 서버 구동 시 모델을 1회만 메모리에 상주시켜 재사용
+- **FP16 Half Precision 양자화**: 가중치 경량화로 연산 속도 향상 + GPU 메모리 50% 절감
+
+**결과**: 360초 → **30초 이내** 단축. 실질적인 서비스 운영 가능 상태 확보.
+
+---
+
+### 2️⃣ Vision API 호출 비용 70% 감소 — 이중 필터링 파이프라인
+
+**문제**: 모든 이미지에 Vision API를 호출하면 비용 폭증. 저품질 이미지를 API 호출 전에 걸러낼 방법이 필요했다.
+
+**해결**:
+- **1차 필터링 (OpenCV)**: 선명도 · 밝기 · 얼굴 감지를 룰 기반으로 사전 차단. 연산 비용 없이 부적합 이미지를 제거.
+- **2차 필터링 (GPT Vision)**: 통과한 이미지에만 품질 채점을 수행해 기준 미달 이미지를 탈락.
+
+**결과**: Vision API 호출 **70% 감소**. 비용 최적화와 품질 게이팅을 동시에 달성.
+
+---
+
+### 3️⃣ 모바일 저장 UX 개선 — Web Share API
+
+**문제**: 모바일 브라우저 보안 정책으로 이미지 다운로드 시 갤러리가 아닌 '파일 앱'으로 저장. 사용자 저장 Depth 4단계.
+
+**해결**: Web Share API 도입으로 시스템 공유 시트 호출 → 갤러리 직접 저장. Depth **4단계 → 2단계** 축소.
+
+---
+
+### 4️⃣ DB 타입 불일치 및 Mixed Content 이미지 렌더링 실패
+
+**문제**: 특정 DB 환경에서 문자열이 `bytes` 타입으로 반환되어 서버 에러 발생. HTTP 이미지 URL이 HTTPS 환경에서 Mixed Content로 렌더링 실패.
+
+**해결**:
+- `safe_dec()` 유틸리티 함수로 모든 DB 반환값 타입 검증 처리
+- 이미지 데이터를 **Base64**로 인코딩하여 전송, Mixed Content 이슈 완전 차단
 
 ---
 
@@ -98,12 +158,11 @@ pimfy-ai-studio/
 ├── backend/
 │   ├── main.py                 # 메인 API 서버 (프로필 생성, 공고 검색, AI 파이프라인)
 │   ├── sdxl_server.py          # SDXL 배경 생성 마이크로서비스 (:8001)
-│   ├── export_onnx_final.py    # 모델 ONNX 익스포트 스크립트
+│   ├── export_onnx_final.py    # Real-ESRGAN ONNX 변환 스크립트
 │   ├── Dockerfile              # 메인 API 이미지 (nvidia/tensorrt 베이스, CUDA 12.1)
 │   ├── Dockerfile.sdxl         # SDXL 서비스 이미지
 │   ├── requirements.txt        # 메인 API 의존성
-│   ├── requirements.sdxl.txt   # SDXL 서비스 의존성
-│   └── *.ttf / *.otf           # 프로필 합성용 한글 폰트 (NanumGothic, Kyobo)
+│   └── requirements.sdxl.txt   # SDXL 서비스 의존성
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
@@ -114,12 +173,13 @@ pimfy-ai-studio/
 │   │   ├── api/profileApi.ts   # 백엔드 API 호출 레이어
 │   │   └── components/ui/      # 공용 UI (LoadingSpinner, Icons)
 │   └── package.json
+├── fonts/                      # 프로필 합성용 한글 폰트 (NanumGothic, Kyobo)
 └── images/                     # README용 이미지 리소스
 ```
 
 ---
 
-## 🚀 시작하기 (Getting Started)
+## 🛠 시작하기 (Getting Started)
 
 > **사전 요구사항**: NVIDIA GPU + CUDA 12.1 환경 (AI 추론), Python 3.10+, Node.js 18+, MySQL
 
@@ -156,11 +216,8 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 **(B) Docker 실행**
 ```bash
-cd backend
-# 메인 API 서버
-docker build -t pimfy-api -f Dockerfile .
-# SDXL 서비스
-docker build -t pimfy-sdxl -f Dockerfile.sdxl .
+# 루트의 docker-compose로 메인 API + SDXL 서비스 동시 실행
+docker compose up --build
 ```
 > 메인 서버는 `sdxl-service:8001`로 SDXL 서비스를 호출하므로, 두 컨테이너를 동일 네트워크에서 실행하세요.
 
@@ -179,3 +236,11 @@ npm run dev
 ```
 
 브라우저에서 `http://localhost:3000` 으로 접속합니다.
+
+---
+
+## 🌱 향후 계획 (Roadmap)
+
+- [ ] 보호소 구독 모델 기반 SaaS 구조 완성
+- [ ] 입양률 개선 효과 정량화 (A/B 테스트 설계)
+- [ ] 미용 · F&B · 소매업 도메인으로 파이프라인 확장

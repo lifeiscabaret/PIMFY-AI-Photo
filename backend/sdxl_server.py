@@ -1,80 +1,109 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import torch
-import os
 import io
 import base64
+import random
 from typing import Optional
-from PIL import Image
-# from diffusers import StableDiffusionXLImg2ImgPipeline # (1. 현재 SDXL은 사용하지 않는 경우 주석 처리)
-import numpy as np
+from PIL import Image, ImageDraw, ImageFilter
+import math
 
-# --- Pydantic 모델 정의 ---
 class BackgroundRequest(BaseModel):
-    # 메인 서버로부터 전송받을 누끼 딴 강아지 이미지와 배경 프롬프트
     base64_dog_image: str
     prompt: str
-    neg_prompt: Optional[str] = "messy, cluttered, text, letters, blurry, dark, noisy, low quality"
-    color_hint: str # 예: "pastel pink", "soft blue"
+    neg_prompt: Optional[str] = None
+    color_hint: str = "soft pastel"
 
 class BackgroundResponse(BaseModel):
     base64_background_image: str
 
-# --- FastAPI 앱 및 AI 모델 변수 선언 ---
-app = FastAPI(title="SDXL Background Service")
-models = {}
-device = "cuda" if torch.cuda.is_available() else "cpu"
+app = FastAPI(title="Background Service")
+
+# 색상 팔레트 - 분위기별
+COLOR_PALETTES = {
+    "warm": [(255, 243, 226)],
+    "cool": [(214, 234, 255)],
+    "pink": [(255, 214, 228)],
+    "mint": [(198, 247, 228)],
+    "lavender": [(225, 214, 255)],
+    "cream": [(255, 248, 220)],
+    "peach": [(255, 224, 204)],
+}
+
+def get_palette_from_hint(hint: str):
+    hint = hint.lower()
+    if any(w in hint for w in ["pink", "핑크", "girl", "여"]):
+        return COLOR_PALETTES["pink"]
+    elif any(w in hint for w in ["blue", "cool", "남", "boy"]):
+        return COLOR_PALETTES["cool"]
+    elif any(w in hint for w in ["mint", "green", "활발"]):
+        return COLOR_PALETTES["mint"]
+    elif any(w in hint for w in ["purple", "lavender", "순둥"]):
+        return COLOR_PALETTES["lavender"]
+    elif any(w in hint for w in ["warm", "orange", "에너지"]):
+        return COLOR_PALETTES["warm"]
+    elif any(w in hint for w in ["peach", "복숭아"]):
+        return COLOR_PALETTES["peach"]
+    else:
+        return random.choice(list(COLOR_PALETTES.values()))
+
+def create_gradient_background(width: int, height: int, colors: list) -> Image.Image:
+    color = colors[0]
+    return Image.new("RGB", (width, height), color)
+
+def add_decorative_elements(img: Image.Image, colors: list) -> Image.Image:
+    draw = ImageDraw.Draw(img)
+    w, h = img.size
+    
+    accent = tuple(max(0, c - 30) for c in colors[0])
+    
+    # 우상단 원형 장식
+    for i in range(3):
+        r = 80 - i * 20
+        alpha = 40 - i * 10
+        circle_color = accent + (alpha,)
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.ellipse([w - r*2 - 20 + i*10, -r + i*10, w - 20 + i*10, r + i*10], 
+                            fill=(*accent, 30 - i*8))
+        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+    
+    # 좌하단 원형 장식
+    draw = ImageDraw.Draw(img)
+    for i in range(3):
+        r = 60 - i * 15
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.ellipse([-r + i*8, h - r*2 + i*8, r + i*8, h + i*8],
+                            fill=(*accent, 25 - i*6))
+        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+    
+    return img
 
 @app.on_event("startup")
-def load_models():
-    print("SDXL AI 모델 로딩 시작...")
-    print(f"SDXL Using device: {device}")
-    
-    # models["sdxl_pipe"] = StableDiffusionXLImg2ImgPipeline.from_pretrained(
-    #     "stabilityai/stable-diffusion-xl-base-1.0",
-    #     torch_dtype=torch.float16,
-    #     variant="fp16",
-    #     use_safetensors=True
-    # ).to(device)
-    
-    # 🚨 현재 단계에서는 실제 SDXL 로딩 코드 주석 유지 (VRAM 과부하 방지)
-    print("SDXL 로드 완료. (현재는 VRAM 보호를 위해 더미 상태)")
-
+def startup():
+    print("✅ Background Service 시작 완료 (PIL 모드)")
 
 @app.post("/generate/background", response_model=BackgroundResponse)
 async def generate_background_api(request: BackgroundRequest):
-    # 1. Base64 디코딩
     try:
         image_data = base64.b64decode(request.base64_dog_image)
-        dog_image = Image.open(io.BytesIO(image_data)).convert("RGBA")
+        dog_image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        w, h = dog_image.size
     except:
         raise HTTPException(status_code=400, detail="Invalid Base64 image data")
 
-    # 2. SDXL 프롬프트 구성 (사용자 정의 색상 및 스타일 반영)
-    final_prompt = (
-        f"A studio portrait background, {request.color_hint} color palette, "
-        f"minimalist and clean aesthetic, centered for a dog subject. "
-        f"{request.prompt}, professional, 8K."
-    )
+    palette = get_palette_from_hint(request.color_hint + " " + request.prompt)
     
-    # 3. ⭐️ SDXL 추론 로직 (더미)
-    # 테스트-> 단색의 더미 배경 반환.
-    width, height = dog_image.size
-    
-    # 더미 배경 생성 (파스텔 핑크 예시)
-    dummy_background = Image.new('RGB', (width, height), (255, 204, 204)) 
-    
-    # 4. 합성 및 인코딩
-    # (실제 워크플로우에서는 SDXL이 생성한 배경 이미지에 누끼 딴 강아지 이미지를 합성해야 하지만,
-    # 이 서버는 배경 이미지만 반환하는 역할이므로, 메인 서버에서 최종 합성을 합니다.)
-    
-    # 5. Base64 인코딩
-    buffered = io.BytesIO()
-    dummy_background.save(buffered, format="PNG")
-    base64_img = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    background = create_gradient_background(w, h, palette)
+    background = add_decorative_elements(background, palette)
+    background = background.filter(ImageFilter.GaussianBlur(radius=1))
 
-    # 6. SDXL 사용 후 VRAM 정리 (선택적)
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    buffered = io.BytesIO()
+    background.save(buffered, format="PNG")
+    base64_img = base64.b64encode(buffered.getvalue()).decode("utf-8")
     
     return BackgroundResponse(base64_background_image=base64_img)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)

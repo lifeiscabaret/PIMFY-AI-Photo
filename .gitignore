@@ -1,16 +1,17 @@
-# Python cache
+.env
+BasicSR/
 __pycache__/
+*.pth
+generated_images/
 
-# Dependencies
-/node_modules
-/frontend/node_modules
-/backend/venv/
 
-# Next.js build files
-/frontend/.next/
-/frontend/out/
-/build
+# 실행 파일 및 로그
+cloudflared*
+*.log
 
+# 생성된 이미지 폴더 (용량 차주 방지)
+generated_images/
+backend/generated_images/
 # Vercel
 .vercel
 
@@ -38,3 +39,6 @@ next-env.d.ts
 package-lock.json
 
 settings.json
+sdxl/
+logos/
+sdxl/
