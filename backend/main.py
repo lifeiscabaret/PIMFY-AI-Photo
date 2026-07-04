@@ -346,9 +346,9 @@ async def generate_real_profile(request: RealProfileRequest):
         fname = f"{uuid.uuid4()}.jpg"
         template.save(f"generated_images/{fname}", quality=90)
         return {"profile_text": '\n'.join(lines), "profile_image_base64": "", "image_url": f"{CURRENT_SERVER_URL}/images/{fname}"}
-    except Exception as e: 
-    	print(f"🚨 Profile Generation Fatal Error: {e}") # 로그에 상세 에러 출력
-    	return {"profile_text": f"Error: {str(e)}"}
+    except Exception as e:
+        print(f"🚨 Profile Generation Fatal Error: {e}") # 로그에 상세 에러 출력
+        return {"profile_text": f"Error: {str(e)}"}
 
 @app.post("/api/v1/generate-adoption-profile")
 async def generate_adoption_profile(image: UploadFile = File(...), name: str = Form(...), age: str = Form(...), personality: str = Form(...), features: str = Form(...), contact: Optional[str] = Form(None)):
@@ -416,18 +416,27 @@ async def generate_studio_profile_mcp(base64_image: str, bg_color: str = "#FFD1D
     try:
         # Base64 데이터를 이미지로 변환
         img_data = base64.b64decode(base64_image)
-        img = Image.open(io.BytesIO(img_data)).convert("RGB")
-        
-        # --- 이후 로직은 기존과 동일 ---
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(img_data)).convert("RGB"))
+
+        # 업스케일링 (저해상도일 때만)
         if max(img.size) > 1280: img.thumbnail((1280, 1280), Image.LANCZOS)
-        
-        # (중략: 기존 업스케일링 및 누끼 로직)
-        
+        if max(img.size) < 1000:
+            out, _ = models["upsampler"].enhance(pil_to_cv2(img), outscale=4)
+            img = resize_image_if_too_large(cv2_to_pil(out), 1500)
+
+        # 배경 제거 후 피사체 크롭
         no_bg = remove(img, session=models["remover"], alpha_matting=True)
-        # ... (중략) ...
+        subject = no_bg.crop(no_bg.getbbox()) if no_bg.getbbox() else no_bg
+
+        # 배경 템플릿 합성
+        template = Image.new("RGB", (1080, 1350), ImageColor.getrgb(bg_color) if bg_color else (255, 240, 245))
+        scale = min(972 / subject.size[0], 1215 / subject.size[1])
+        new_size = (int(subject.size[0] * scale), int(subject.size[1] * scale))
+        subject = subject.resize(new_size, Image.LANCZOS)
+        template.paste(subject, ((1080 - new_size[0]) // 2, (1350 - new_size[1]) // 2), subject)
+        template = attach_logo_bottom_center(template)
 
         fname = f"{uuid.uuid4()}.jpg"
-       # template.save(f"generated_images/{fname}", quality=90)
         template.save(f"generated_images/{fname}", quality=90)
 
         return {
@@ -435,6 +444,7 @@ async def generate_studio_profile_mcp(base64_image: str, bg_color: str = "#FFD1D
             "message": "성공적으로 생성되었습니다."
         }
     except Exception as e:
+        print(f"🚨 Studio MCP Error: {e}")
         return {"message": f"에러 발생: {str(e)}"}
 
 @app.post("/api/v1/generate-studio-profile")
