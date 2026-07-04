@@ -1,8 +1,10 @@
 # 📸 PIMFY Photo (핌피포토)
 > **유기견의 개성과 맥락을 시각화하는 AI 프로필 생성 서비스**
 
-> ⚠️ **배포 상태**: 현재 GPU 서버(NCP V100)를 반납하여 **라이브 데모는 운영하지 않습니다.**
+> ⚠️ **배포 상태**: 비용 효율 판단에 따라 GPU 서버(NCP V100)를 반납하여 **라이브 데모는 운영하지 않습니다.**
 > (기존 배포 주소: `http://223.130.146.245:3000` — 현재 접속 불가) 아래 [시작하기](#-시작하기-getting-started) 가이드로 로컬 실행할 수 있습니다.
+>
+> 📌 **본 README는 GPU 서버에서 실제 구축·운영했던 풀 파이프라인(SDXL 배경 생성 · GPT Vision 품질 필터링 포함)을 기준으로 기술합니다.** 서버 반납 이후 공개 저장소는 GPU 없이도 구동되도록, **SDXL 배경 생성 → PIL 절차적 배경 / GPT Vision 필터링 → 비활성화**된 경량 데모 폴백 상태입니다. 데모에서 비활성인 모듈은 아래에 `⛔ 데모 비활성`으로 표기했습니다.
 
 <p align="center">
   <img src="images/pimfyvirus.png" width="45%" alt="PIMFY Virus Data" />
@@ -74,13 +76,13 @@ AI 파이프라인은 메모리 부하 분산을 위해 **메인 API 서버**와
 [1차 필터링] OpenCV — 선명도 · 밝기 · 얼굴 감지 (룰 기반)
     │ Vision API 호출 70% 사전 차단
     ▼
-[2차 필터링] GPT Vision — 품질 채점 후 저품질 이미지 탈락
+[2차 필터링] GPT Vision — 품질 채점 후 저품질 이미지 탈락      ⛔ 데모 비활성
     ▼
 [Real-ESRGAN] 4배 업스케일링 (x4plus)
     ▼
 [rembg] 배경 제거 (isnet-general-use)
     ▼
-[SDXL] 랜덤 파스텔톤 배경 생성 (별도 GPU 서비스, :8001)
+[SDXL] 랜덤 파스텔톤 배경 생성 (별도 GPU 서비스, :8001)      ⛔ 데모: PIL 절차적 배경으로 대체
     ▼
 [GPT-4o-mini] 공공데이터 기반 감성 스토리 생성 + 텍스트 오버레이
     ▼
@@ -89,11 +91,17 @@ AI 파이프라인은 메모리 부하 분산을 위해 **메인 API 서버**와
 
 ---
 
+## 🏗 인프라 협업 (Infrastructure)
+
+경기도 AI 고성능 컴퓨팅 지원사업 선정 프로젝트로, 메가존클라우드 담당자의 초기 서버 구성 지원을 받아 NCP GPU(V100) 인프라를 구축·운영했습니다.
+
+---
+
 ## ⚙️ 기술 스택 (Tech Stack)
 
 | 분류 | 기술 |
 |------|------|
-| AI 모델 | Real-ESRGAN · SDXL · rembg · GPT-4o-mini |
+| AI 모델 | Real-ESRGAN · rembg · GPT-4o-mini · SDXL `⛔ 데모 비활성` |
 | 전처리 | OpenCV |
 | 최적화 | FP16 양자화 · Singleton 모델 로딩 |
 | Backend | FastAPI · PyTorch · Python |
@@ -105,7 +113,7 @@ AI 파이프라인은 메모리 부하 분산을 위해 **메인 API 서버**와
 
 ## 🔥 핵심 트러블슈팅 (Troubleshooting)
 
-### 1️⃣ SDXL 추론 지연 91% 단축 — Singleton + FP16 양자화
+### 1️⃣ SDXL 추론 지연 91% 단축 — Singleton + FP16 양자화 *(GPU 운영 당시)*
 
 **문제**: 이미지 1장당 추론 시간 약 360초(6분). 실시간 서비스 불가 수준의 병목.
 
@@ -121,7 +129,7 @@ AI 파이프라인은 메모리 부하 분산을 위해 **메인 API 서버**와
 
 ---
 
-### 2️⃣ Vision API 호출 비용 70% 감소 — 이중 필터링 파이프라인
+### 2️⃣ Vision API 호출 비용 70% 감소 — 이중 필터링 파이프라인 *(GPU 운영 당시)*
 
 **문제**: 모든 이미지에 Vision API를 호출하면 비용 폭증. 저품질 이미지를 API 호출 전에 걸러낼 방법이 필요했다.
 
@@ -157,9 +165,8 @@ AI 파이프라인은 메모리 부하 분산을 위해 **메인 API 서버**와
 pimfy-ai-studio/
 ├── backend/
 │   ├── main.py                 # 메인 API 서버 (프로필 생성, 공고 검색, AI 파이프라인)
-│   ├── sdxl_server.py          # SDXL 배경 생성 마이크로서비스 (:8001)
-│   ├── export_onnx_final.py    # Real-ESRGAN ONNX 변환 스크립트
-│   ├── Dockerfile              # 메인 API 이미지 (nvidia/tensorrt 베이스, CUDA 12.1)
+│   ├── sdxl_server.py          # 배경 생성 마이크로서비스 (:8001) — 데모는 PIL 절차적 배경
+│   ├── Dockerfile              # 메인 API 이미지 (pytorch 2.1.0 · CUDA 12.1 베이스)
 │   ├── Dockerfile.sdxl         # SDXL 서비스 이미지
 │   ├── requirements.txt        # 메인 API 의존성
 │   └── requirements.sdxl.txt   # SDXL 서비스 의존성
