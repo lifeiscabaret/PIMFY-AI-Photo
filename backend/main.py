@@ -112,7 +112,9 @@ class RealProfileRequest(BaseModel):
 models = {}
 app = FastAPI()
 #Mcp용
-mcp = FastMCP("PimfyVirus")
+# 포트는 생성 시점에 명시한다. MCP_PORT 환경변수는 FastMCP가 읽지 않으며(env_prefix가 FASTMCP_),
+# 지정하지 않으면 기본값 8000으로 떠서 메인 FastAPI 서버와 충돌한다.
+mcp = FastMCP("PimfyVirus", port=8002)
 
 app.add_middleware(
     CORSMiddleware,
@@ -505,10 +507,9 @@ if __name__ == "__main__":
     import uvicorn
     import threading
 
-    # 1. MCP 서버 실행 함수
+    # 1. MCP 서버 실행 함수 (포트는 FastMCP 생성 시 8002로 지정됨)
     def run_mcp():
-        import os
-        os.environ["MCP_PORT"] = "8002" 
+        print(f"🚀 MCP 서버({mcp.settings.port})를 시작합니다...")
         mcp.run(transport="sse")
 
     # MCP 서버를 별도 스레드에서 실행

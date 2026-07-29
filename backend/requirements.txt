@@ -21,5 +21,5 @@ git+https://github.com/xinntao/Real-ESRGAN.git
 aiomysql
 pycuda
 pillow-heif
-mcp
-mcp
+# mcp 2.x는 mcp.server.fastmcp 모듈을 제거했다. main.py가 쓰는 import 경로가 살아있는 1.x로 고정.
+mcp<2
